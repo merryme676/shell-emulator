@@ -1,0 +1,34 @@
+# .gitignore — список файлов и папок,
+# которые git НЕ должен отслеживать.
+# Они не попадут в репозиторий и не будут закоммичены.
+
+# Python — кэш и скомпилированные файлы
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# IDE — настройки редакторов
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS — системные файлы
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Прочее — логи, временные файлы, сборки
+*.log
+*.tmp
+build/
+dist/
