@@ -8,7 +8,7 @@ sys.path.insert(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
 )
 
-from src.main import parse_command  # noqa: E402
+from src.main import parse_command
 
 
 def test_parse_simple_command():
