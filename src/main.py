@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Эмулятор командной оболочки UNIX. Этап 1: REPL."""
 
 import os
@@ -18,7 +17,6 @@ def get_prompt():
     cwd = os.getcwd()
     home = os.path.expanduser("~")
 
-    # Сокращаем домашний путь до ~
     if home and cwd.startswith(home):
         cwd = "~" + cwd[len(home):]
 
