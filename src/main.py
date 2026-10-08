@@ -1,17 +1,63 @@
-"""Эмулятор командной оболочки UNIX. Этап 1: REPL."""
+"""Эмулятор командной оболочки UNIX. Этап 2: конфигурация."""
 
+import argparse
 import os
 import socket
 import sys
 
 
-def get_prompt():
+def parse_args():
+    """
+    Разбирает параметры командной строки.
+
+    Returns:
+        argparse.Namespace: объект с полями vfs, prompt, script.
+    """
+    parser = argparse.ArgumentParser(
+        description="Эмулятор командной оболочки UNIX",
+    )
+    parser.add_argument(
+        "--vfs",
+        help="Путь к физическому расположению VFS",
+    )
+    parser.add_argument(
+        "--prompt",
+        help="Пользовательское приглашение к вводу",
+    )
+    parser.add_argument(
+        "--script",
+        help="Путь к стартовому скрипту",
+    )
+    return parser.parse_args()
+
+
+def print_debug(args):
+    """
+    Отладочный вывод параметров при запуске.
+
+    Args:
+        args: объект с полями vfs, prompt, script.
+    """
+    print("=== Параметры запуска ===")
+    print(f"VFS:    {args.vfs}")
+    print(f"Prompt: {args.prompt}")
+    print(f"Script: {args.script}")
+    print("=========================")
+
+
+def get_prompt(custom_prompt=None):
     """
     Формирует приглашение к вводу.
 
+    Args:
+        custom_prompt: пользовательское приглашение (или None).
+
     Returns:
-        str: Строка вида username@hostname:cwd$
+        str: строка приглашения.
     """
+    if custom_prompt:
+        return custom_prompt
+
     username = os.getenv("USER") or os.getenv("LOGNAME") or "user"
     hostname = socket.gethostname()
     cwd = os.getcwd()
@@ -75,11 +121,80 @@ def execute(command, args):
         print(f"{command}: command not found")
 
 
-def repl():
-    """Основной цикл Read-Eval-Print Loop."""
+def process_line(line, custom_prompt=None):
+    """
+    Обрабатывает одну строку ввода.
+
+    Args:
+        line: строка с командой.
+        custom_prompt: приглашение (для отображения в скрипте).
+
+    Returns:
+        bool: True если нужно продолжать, False если выход.
+    """
+    try:
+        command, args = parse_command(line)
+    except Exception as exc:
+        print(f"Parse error: {exc}", file=sys.stderr)
+        return True
+
+    if command is None:
+        return True
+
+    if command == "exit":
+        return False
+
+    try:
+        execute(command, args)
+    except Exception as exc:
+        print(f"Command error: {exc}", file=sys.stderr)
+
+    return True
+
+
+def run_script(path):
+    """
+    Выполняет команды из стартового скрипта.
+
+    Args:
+        path: путь к файлу скрипта.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        print(f"Ошибка: файл не найден: {path}", file=sys.stderr)
+        return
+    except Exception as exc:
+        print(f"Ошибка чтения скрипта: {exc}", file=sys.stderr)
+        return
+
+    for line in lines:
+        stripped = line.strip()
+
+        if not stripped:
+            continue
+
+        if stripped.startswith("#"):
+            continue
+
+        print(f">>> {stripped}")
+
+        if not process_line(line):
+            print("(скрипт остановлен командой exit)")
+            return
+
+
+def repl(custom_prompt=None):
+    """
+    Основной цикл Read-Eval-Print Loop.
+
+    Args:
+        custom_prompt: пользовательское приглашение (или None).
+    """
     while True:
         try:
-            line = input(get_prompt())
+            line = input(get_prompt(custom_prompt))
         except (EOFError, KeyboardInterrupt):
             print()
             break
@@ -87,27 +202,19 @@ def repl():
             print(f"Input error: {exc}", file=sys.stderr)
             continue
 
-        try:
-            command, args = parse_command(line)
-        except Exception as exc:
-            print(f"Parse error: {exc}", file=sys.stderr)
-            continue
-
-        if command is None:
-            continue
-
-        if command == "exit":
+        if not process_line(line):
             break
-
-        try:
-            execute(command, args)
-        except Exception as exc:
-            print(f"Command error: {exc}", file=sys.stderr)
 
 
 def main():
     """Точка входа."""
-    repl()
+    args = parse_args()
+    print_debug(args)
+
+    if args.script:
+        run_script(args.script)
+
+    repl(args.prompt)
 
 
 if __name__ == "__main__":

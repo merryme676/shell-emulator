@@ -1,0 +1,5 @@
+# Этот скрипт остановится на exit
+ls
+exit
+ls -la
+cd /tmp
