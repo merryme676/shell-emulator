@@ -156,6 +156,8 @@ def run_script(path):
     """
     Выполняет команды из стартового скрипта.
 
+    При ошибке сообщает номер строки и описание проблемы.
+
     Args:
         path: путь к файлу скрипта.
     """
@@ -169,7 +171,12 @@ def run_script(path):
         print(f"Ошибка чтения скрипта: {exc}", file=sys.stderr)
         return
 
+    errors_count = 0
+    line_number = 0
+    known_commands = ("ls", "cd")
+
     for line in lines:
+        line_number += 1
         stripped = line.strip()
 
         if not stripped:
@@ -180,9 +187,48 @@ def run_script(path):
 
         print(f">>> {stripped}")
 
-        if not process_line(line):
+        try:
+            command, args = parse_command(stripped)
+        except Exception as exc:
+            print(
+                f"[Ошибка скрипта, строка {line_number}]: "
+                f"не удалось разобрать: {exc}",
+                file=sys.stderr,
+            )
+            errors_count += 1
+            continue
+
+        if command is None:
+            continue
+
+        if command == "exit":
             print("(скрипт остановлен командой exit)")
-            return
+            break
+
+        if command not in known_commands:
+            print(
+                f"[Ошибка скрипта, строка {line_number}]: "
+                f"неизвестная команда: {command}",
+                file=sys.stderr,
+            )
+            errors_count += 1
+            continue
+
+        try:
+            execute(command, args)
+        except Exception as exc:
+            print(
+                f"[Ошибка скрипта, строка {line_number}]: "
+                f"команда упала: {exc}",
+                file=sys.stderr,
+            )
+            errors_count += 1
+
+    if errors_count > 0:
+        print(
+            f"Всего ошибок в скрипте: {errors_count}",
+            file=sys.stderr,
+        )
 
 
 def repl(custom_prompt=None):
