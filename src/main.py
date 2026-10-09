@@ -152,83 +152,114 @@ def process_line(line, custom_prompt=None):
     return True
 
 
+def read_script_file(path):
+    """
+    Читает файл стартового скрипта.
+
+    Args:
+        path: путь к файлу.
+
+    Returns:
+        list: список строк или None при ошибке.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.readlines()
+    except FileNotFoundError:
+        print(f"Ошибка: файл не найден: {path}", file=sys.stderr)
+        return None
+    except Exception as exc:
+        print(f"Ошибка чтения скрипта: {exc}", file=sys.stderr)
+        return None
+
+
+def report_script_error(line_number, message):
+    """
+    Сообщает об ошибке в стартовом скрипте.
+
+    Args:
+        line_number: номер строки в файле.
+        message: описание ошибки.
+    """
+    print(
+        f"[Ошибка скрипта, строка {line_number}]: {message}",
+        file=sys.stderr,
+    )
+
+
+def process_script_line(line, line_number, known_commands):
+    """
+    Обрабатывает одну строку стартового скрипта.
+
+    Args:
+        line: строка из файла.
+        line_number: номер строки в файле.
+        known_commands: кортеж известных команд.
+
+    Returns:
+        int: 0 если успех, 1 если ошибка.
+    """
+    stripped = line.strip()
+
+    if not stripped:
+        return 0
+
+    if stripped.startswith("#"):
+        return 0
+
+    print(f">>> {stripped}")
+
+    try:
+        command, args = parse_command(stripped)
+    except Exception as exc:
+        report_script_error(line_number, f"не удалось разобрать: {exc}")
+        return 1
+
+    if command is None:
+        return 0
+
+    if command == "exit":
+        print("(скрипт остановлен командой exit)")
+        return -1
+
+    if command not in known_commands:
+        report_script_error(line_number, f"неизвестная команда: {command}")
+        return 1
+
+    try:
+        execute(command, args)
+    except Exception as exc:
+        report_script_error(line_number, f"команда упала: {exc}")
+        return 1
+
+    return 0
+
+
 def run_script(path):
     """
     Выполняет команды из стартового скрипта.
 
-    При ошибке сообщает номер строки и описание проблемы.
-
     Args:
         path: путь к файлу скрипта.
     """
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-    except FileNotFoundError:
-        print(f"Ошибка: файл не найден: {path}", file=sys.stderr)
-        return
-    except Exception as exc:
-        print(f"Ошибка чтения скрипта: {exc}", file=sys.stderr)
+    lines = read_script_file(path)
+    if lines is None:
         return
 
-    errors_count = 0
-    line_number = 0
     known_commands = ("ls", "cd")
+    errors_count = 0
 
-    for line in lines:
-        line_number += 1
-        stripped = line.strip()
+    for line_number, line in enumerate(lines, start=1):
+        result = process_script_line(line, line_number, known_commands)
 
-        if not stripped:
-            continue
-
-        if stripped.startswith("#"):
-            continue
-
-        print(f">>> {stripped}")
-
-        try:
-            command, args = parse_command(stripped)
-        except Exception as exc:
-            print(
-                f"[Ошибка скрипта, строка {line_number}]: "
-                f"не удалось разобрать: {exc}",
-                file=sys.stderr,
-            )
-            errors_count += 1
-            continue
-
-        if command is None:
-            continue
-
-        if command == "exit":
-            print("(скрипт остановлен командой exit)")
+        if result == -1:
             break
 
-        if command not in known_commands:
-            print(
-                f"[Ошибка скрипта, строка {line_number}]: "
-                f"неизвестная команда: {command}",
-                file=sys.stderr,
-            )
-            errors_count += 1
-            continue
-
-        try:
-            execute(command, args)
-        except Exception as exc:
-            print(
-                f"[Ошибка скрипта, строка {line_number}]: "
-                f"команда упала: {exc}",
-                file=sys.stderr,
-            )
+        if result == 1:
             errors_count += 1
 
     if errors_count > 0:
-        print(
-            f"Всего ошибок в скрипте: {errors_count}",
-            file=sys.stderr,
-        )
+        print(f"Всего ошибок в скрипте: {errors_count}", file=sys.stderr)
 
 
 def repl(custom_prompt=None):
