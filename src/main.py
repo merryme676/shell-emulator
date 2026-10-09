@@ -200,21 +200,16 @@ def process_script_line(line, line_number, known_commands):
         int: 0 если успех, 1 если ошибка.
     """
     stripped = line.strip()
-
     if not stripped:
         return 0
-
     if stripped.startswith("#"):
         return 0
-
     print(f">>> {stripped}")
-
     try:
         command, args = parse_command(stripped)
     except Exception as exc:
         report_script_error(line_number, f"не удалось разобрать: {exc}")
         return 1
-
     if command is None:
         return 0
 
