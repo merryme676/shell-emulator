@@ -291,6 +291,41 @@ def cmd_cd(args):
     CURRENT_DIR = child
 
 
+def cmd_uptime(args):
+    """
+    Команда uptime: показывает время работы эмулятора.
+
+    Args:
+        args: список аргументов (не используются).
+    """
+    if START_TIME is None:
+        print("uptime: время старта не задано")
+        return
+
+    import time
+    elapsed = int(time.time() - START_TIME)
+
+    hours = elapsed // 3600
+    minutes = (elapsed % 3600) // 60
+    seconds = elapsed % 60
+
+    print(f"Время работы: {hours}:{minutes:02d}:{seconds:02d}")
+
+
+def cmd_history(args):
+    """
+    Команда history: показывает историю команд.
+
+    Args:
+        args: список аргументов (не используются).
+    """
+    if not HISTORY:
+        return
+
+    for index, command in enumerate(HISTORY, start=1):
+        print(f"{index:3d}  {command}")
+
+
 def execute(command, args):
     """
     Выполняет команду по имени.
@@ -303,6 +338,10 @@ def execute(command, args):
         cmd_ls(args)
     elif command == "cd":
         cmd_cd(args)
+    elif command == "uptime":
+        cmd_uptime(args)
+    elif command == "history":
+        cmd_history(args)
     else:
         print(f"{command}: command not found")
 
@@ -318,6 +357,9 @@ def process_line(line, custom_prompt=None):
     Returns:
         bool: True если нужно продолжать, False если выход.
     """
+    stripped = line.strip()
+    if stripped:
+        HISTORY.append(stripped)
     try:
         command, args = parse_command(line)
     except Exception as exc:
@@ -427,7 +469,7 @@ def run_script(path):
     if lines is None:
         return
 
-    known_commands = ("ls", "cd")
+    known_commands = ("ls", "cd", "uptime", "history")
     errors_count = 0
 
     for line_number, line in enumerate(lines, start=1):
