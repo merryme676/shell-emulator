@@ -7,13 +7,18 @@ uptime
 history
 cd /
 ls
-uptime
-
-# Проверка ошибки
-cd nonexistent
-
-# После ошибки
-uptime
-history
-
+mkdir newdir
+ls
+mkdir newdir
+cd newdir
+ls
+cd /
+ls
+vfs-load vfs/deep.xml
+ls
+cd level1
+ls
+cd level2
+cd level3
+ls
 exit

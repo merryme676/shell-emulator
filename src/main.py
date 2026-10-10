@@ -326,6 +326,60 @@ def cmd_history(args):
         print(f"{index:3d}  {command}")
 
 
+def cmd_mkdir(args):
+    """
+    Команда mkdir: создаёт папку в текущей VFS.
+
+    Args:
+        args: список аргументов. args[0] — имя папки.
+    """
+    if CURRENT_DIR is None:
+        print(f"mkdir: {args}")
+        return
+
+    if not args:
+        print("mkdir: не указано имя папки")
+        return
+
+    name = args[0]
+
+    if not CURRENT_DIR.is_dir:
+        print(f"mkdir: {CURRENT_DIR.name}: не папка")
+        return
+
+    if CURRENT_DIR.find_child(name) is not None:
+        print(f"mkdir: {name}: уже существует")
+        return
+
+    new_dir = VfsNode(name, is_dir=True)
+    CURRENT_DIR.add_child(new_dir)
+    print(f"Создана папка: {name}")
+
+
+def cmd_vfs_load(args):
+    """
+    Команда vfs-load: загружает новую VFS из файла.
+
+    Args:
+        args: список аргументов. args[0] — путь к XML.
+    """
+    global CURRENT_VFS, CURRENT_DIR
+
+    if not args:
+        print("vfs-load: не указан путь к файлу")
+        return
+
+    path = args[0]
+    new_vfs = load_vfs(path)
+
+    if new_vfs is None:
+        return
+
+    CURRENT_VFS = new_vfs
+    CURRENT_DIR = new_vfs
+    print(f"VFS загружена: {new_vfs.name}")
+
+
 def execute(command, args):
     """
     Выполняет команду по имени.
@@ -342,6 +396,10 @@ def execute(command, args):
         cmd_uptime(args)
     elif command == "history":
         cmd_history(args)
+    elif command == "mkdir":
+        cmd_mkdir(args)
+    elif command == "vfs-load":
+        cmd_vfs_load(args)
     else:
         print(f"{command}: command not found")
 
@@ -469,7 +527,9 @@ def run_script(path):
     if lines is None:
         return
 
-    known_commands = ("ls", "cd", "uptime", "history")
+    known_commands = (
+    "ls", "cd", "uptime", "history", "mkdir", "vfs-load",
+)
     errors_count = 0
 
     for line_number, line in enumerate(lines, start=1):
