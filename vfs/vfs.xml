@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vfs name="test">
+    <dir name="home">
+        <dir name="user">
+            <file name="readme.txt">SGVsbG8=</file>
+        </dir>
+    </dir>
+    <dir name="tmp" />
+</vfs>

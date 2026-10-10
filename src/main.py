@@ -1,9 +1,153 @@
 """Эмулятор командной оболочки UNIX. Этап 2: конфигурация."""
 
 import argparse
+import base64
 import os
 import socket
 import sys
+import xml.etree.ElementTree as ET
+
+
+CURRENT_VFS = None
+CURRENT_DIR = None
+START_TIME = None
+HISTORY = []
+
+
+class VfsNode:
+    """
+    Узел виртуальной файловой системы.
+
+    Может быть папкой (is_dir=True) или файлом (is_dir=False).
+    """
+
+    def __init__(self, name, is_dir=False, parent=None):
+        """
+        Создаёт узел.
+
+        Args:
+            name: имя узла (папки или файла).
+            is_dir: True если папка, False если файл.
+            parent: родительский узел (или None для корня).
+        """
+        self.name = name
+        self.is_dir = is_dir
+        self.parent = parent
+        self.children = {}
+        self.content = ""
+
+    def add_child(self, node):
+        """
+        Добавляет дочерний узел.
+
+        Args:
+            node: узел для добавления.
+        """
+        self.children[node.name] = node
+        node.parent = self
+
+    def find_child(self, name):
+        """
+        Ищет дочерний узел по имени.
+
+        Args:
+            name: имя дочернего узла.
+
+        Returns:
+            VfsNode или None, если не найдено.
+        """
+        return self.children.get(name)
+
+    def get_path(self):
+        """
+        Возвращает полный путь от корня.
+
+        Returns:
+            str: путь вида "/home/user/file.txt".
+        """
+        if self.parent is None:
+            return "/"
+
+        parts = []
+        current = self
+        while current.parent is not None:
+            parts.append(current.name)
+            current = current.parent
+
+        return "/" + "/".join(reversed(parts))
+
+
+def load_vfs(path):
+    """
+    Загружает VFS из XML-файла.
+
+    Args:
+        path: путь к XML-файлу.
+
+    Returns:
+        VfsNode или None при ошибке.
+    """
+    try:
+        tree = ET.parse(path)
+    except FileNotFoundError:
+        print(f"Ошибка: файл VFS не найден: {path}", file=sys.stderr)
+        return None
+    except ET.ParseError as exc:
+        print(f"Ошибка формата XML: {exc}", file=sys.stderr)
+        return None
+
+    root_xml = tree.getroot()
+    root = VfsNode(root_xml.get("name", "vfs"), is_dir=True)
+
+    build_tree(root_xml, root)
+
+    return root
+
+
+def build_tree(xml_node, vfs_node):
+    """
+    Рекурсивно строит дерево VFS из XML.
+
+    Args:
+        xml_node: XML-элемент.
+        vfs_node: соответствующий узел VFS.
+    """
+    for child in xml_node:
+        name = child.get("name", "unknown")
+
+        if child.tag == "dir":
+            dir_node = VfsNode(name, is_dir=True)
+            vfs_node.add_child(dir_node)
+            build_tree(child, dir_node)
+
+        elif child.tag == "file":
+            file_node = VfsNode(name, is_dir=False)
+            file_node.content = decode_content(child)
+            vfs_node.add_child(file_node)
+
+
+def decode_content(xml_node):
+    """
+    Декодирует содержимое файла из XML.
+
+    Args:
+        xml_node: XML-элемент файла.
+
+    Returns:
+        str: содержимое файла.
+    """
+    text = (xml_node.text or "").strip()
+    encoding = xml_node.get("encoding", "text")
+
+    if encoding == "base64":
+        try:
+            raw = base64.b64decode(text)
+            return raw.decode("utf-8", errors="replace")
+        except Exception as exc:
+            print(f"Ошибка base64: {exc}", file=sys.stderr)
+            return ""
+
+    return text
 
 
 def parse_args():
@@ -87,22 +231,64 @@ def parse_command(line):
 
 def cmd_ls(args):
     """
-    Заглушка команды ls.
+    Команда ls: показывает содержимое текущей папки.
 
     Args:
-        args: список аргументов команды.
+        args: список аргументов (пока не используются).
     """
-    print(f"ls: {args}")
+    if CURRENT_DIR is None:
+        print(f"ls: {args}")
+        return
+
+    if not CURRENT_DIR.is_dir:
+        print(f"{CURRENT_DIR.name}: не папка")
+        return
+
+    if not CURRENT_DIR.children:
+        return
+
+    for name in sorted(CURRENT_DIR.children):
+        print(name)
 
 
 def cmd_cd(args):
     """
-    Заглушка команды cd.
+    Команда cd: переходит в папку.
 
     Args:
-        args: список аргументов команды.
+        args: список аргументов. args[0] — путь.
     """
-    print(f"cd: {args}")
+    global CURRENT_DIR
+
+    if CURRENT_DIR is None:
+        print(f"cd: {args}")
+        return
+
+    if not args:
+        CURRENT_DIR = CURRENT_VFS
+        return
+
+    target = args[0]
+
+    if target == "/":
+        CURRENT_DIR = CURRENT_VFS
+        return
+
+    if target == "..":
+        if CURRENT_DIR.parent is not None:
+            CURRENT_DIR = CURRENT_DIR.parent
+        return
+
+    child = CURRENT_DIR.find_child(target)
+    if child is None:
+        print(f"cd: {target}: папка не найдена")
+        return
+
+    if not child.is_dir:
+        print(f"cd: {target}: не папка")
+        return
+
+    CURRENT_DIR = child
 
 
 def execute(command, args):
@@ -280,8 +466,20 @@ def repl(custom_prompt=None):
 
 def main():
     """Точка входа."""
+    global CURRENT_VFS, CURRENT_DIR, START_TIME
+
+    import time
+    START_TIME = time.time()
+
     args = parse_args()
     print_debug(args)
+
+    if args.vfs:
+        vfs_root = load_vfs(args.vfs)
+        if vfs_root is not None:
+            CURRENT_VFS = vfs_root
+            CURRENT_DIR = vfs_root
+            print(f"VFS загружена: {vfs_root.name}")
 
     if args.script:
         run_script(args.script)
