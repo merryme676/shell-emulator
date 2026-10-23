@@ -5,7 +5,7 @@ import base64
 import os
 import socket
 import sys
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as xml_tree
 
 
 current_vfs = None
@@ -88,11 +88,11 @@ def load_vfs(path):
         VfsNode или None при ошибке.
     """
     try:
-        tree = ET.parse(path)
+        tree = xml_tree.parse(path)
     except FileNotFoundError:
         print(f"Ошибка: файл VFS не найден: {path}", file=sys.stderr)
         return None
-    except ET.ParseError as exc:
+    except xml_tree.ParseError as exc:
         print(f"Ошибка формата XML: {exc}", file=sys.stderr)
         return None
 
@@ -271,14 +271,6 @@ def cmd_cd(args):
     """
     Команда cd: переходит в папку.
 
-    Поддерживает:
-        cd              — в корень
-        cd /            — в корень
-        cd ..           — наверх
-        cd ../..        — на два уровня вверх
-        cd a/b/c        — многоуровневый путь
-        cd ../tmp/home  — смешанный путь
-
     Args:
         args: список аргументов. args[0] — путь.
     """
@@ -293,7 +285,22 @@ def cmd_cd(args):
         return
 
     target = args[0]
+    new_dir = resolve_path(target)
 
+    if new_dir is not None:
+        current_dir = new_dir
+
+
+def resolve_path(target):
+    """
+    Находит узел по пути.
+
+    Args:
+        target: путь (например, '../home/user').
+
+    Returns:
+        VfsNode или None при ошибке.
+    """
     if target.startswith("/"):
         current = current_vfs
         parts = target.strip("/").split("/")
@@ -302,27 +309,44 @@ def cmd_cd(args):
         parts = target.split("/")
 
     for part in parts:
-        if not part or part == ".":
-            continue
+        current = step_into(current, part, target)
+        if current is None:
+            return None
 
-        if part == "..":
-            if current.parent is not None:
-                current = current.parent
-            continue
+    return current
 
-        child = current.find_child(part)
 
-        if child is None:
-            print(f"cd: {target}: папка не найдена")
-            return
+def step_into(current, part, target):
+    """
+    Один шаг по пути.
 
-        if not child.is_dir:
-            print(f"cd: {target}: не папка")
-            return
+    Args:
+        current: текущий узел.
+        part: элемент пути (имя, '..', '.').
+        target: исходный путь (для сообщений).
 
-        current = child
+    Returns:
+        VfsNode или None при ошибке.
+    """
+    if not part or part == ".":
+        return current
 
-    current_dir = current
+    if part == "..":
+        if current.parent is not None:
+            return current.parent
+        return current
+
+    child = current.find_child(part)
+
+    if child is None:
+        print(f"cd: {target}: папка не найдена")
+        return None
+
+    if not child.is_dir:
+        print(f"cd: {target}: не папка")
+        return None
+
+    return child
 
 
 def cmd_uptime(args):
