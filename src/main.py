@@ -8,10 +8,10 @@ import sys
 import xml.etree.ElementTree as ET
 
 
-CURRENT_VFS = None
-CURRENT_DIR = None
-START_TIME = None
-HISTORY = []
+current_vfs = None
+current_dir = None
+start_time = None
+history_list = []
 
 
 class VfsNode:
@@ -231,23 +231,39 @@ def parse_command(line):
 
 def cmd_ls(args):
     """
-    Команда ls: показывает содержимое текущей папки.
+    Команда ls: показывает содержимое папки.
 
     Args:
-        args: список аргументов (пока не используются).
+        args: список аргументов (может содержать имя папки).
     """
-    if CURRENT_DIR is None:
+    if current_dir is None:
         print(f"ls: {args}")
         return
 
-    if not CURRENT_DIR.is_dir:
-        print(f"{CURRENT_DIR.name}: не папка")
+    target = current_dir
+
+    for arg in args:
+        if arg.startswith("-"):
+            continue
+
+        child = current_dir.find_child(arg)
+
+        if child is None:
+            print(f"ls: {arg}: папка не найдена")
+            return
+
+        if not child.is_dir:
+            print(f"ls: {arg}: не папка")
+            return
+
+        target = child
+        break
+
+    if not target.is_dir:
+        print(f"ls: {target.name}: не папка")
         return
 
-    if not CURRENT_DIR.children:
-        return
-
-    for name in sorted(CURRENT_DIR.children):
+    for name in sorted(target.children):
         print(name)
 
 
@@ -255,40 +271,147 @@ def cmd_cd(args):
     """
     Команда cd: переходит в папку.
 
+    Поддерживает:
+        cd              — в корень
+        cd /            — в корень
+        cd ..           — наверх
+        cd ../..        — на два уровня вверх
+        cd a/b/c        — многоуровневый путь
+        cd ../tmp/home  — смешанный путь
+
     Args:
         args: список аргументов. args[0] — путь.
     """
-    global CURRENT_DIR
+    global current_dir
 
-    if CURRENT_DIR is None:
+    if current_dir is None:
         print(f"cd: {args}")
         return
 
     if not args:
-        CURRENT_DIR = CURRENT_VFS
+        current_dir = current_vfs
         return
 
     target = args[0]
 
-    if target == "/":
-        CURRENT_DIR = CURRENT_VFS
+    if target.startswith("/"):
+        current = current_vfs
+        parts = target.strip("/").split("/")
+    else:
+        current = current_dir
+        parts = target.split("/")
+
+    for part in parts:
+        if not part or part == ".":
+            continue
+
+        if part == "..":
+            if current.parent is not None:
+                current = current.parent
+            continue
+
+        child = current.find_child(part)
+
+        if child is None:
+            print(f"cd: {target}: папка не найдена")
+            return
+
+        if not child.is_dir:
+            print(f"cd: {target}: не папка")
+            return
+
+        current = child
+
+    current_dir = current
+
+
+def cmd_uptime(args):
+    """
+    Команда uptime: показывает время работы эмулятора.
+
+    Args:
+        args: список аргументов (не используются).
+    """
+    if start_time is None:
+        print("uptime: время старта не задано")
         return
 
-    if target == "..":
-        if CURRENT_DIR.parent is not None:
-            CURRENT_DIR = CURRENT_DIR.parent
+    import time
+    elapsed = int(time.time() - start_time)
+
+    hours = elapsed // 3600
+    minutes = (elapsed % 3600) // 60
+    seconds = elapsed % 60
+
+    print(f"Время работы: {hours}:{minutes:02d}:{seconds:02d}")
+
+
+def cmd_history_list(args):
+    """
+    Команда history_list: показывает историю команд.
+
+    Args:
+        args: список аргументов (не используются).
+    """
+    if not history_list:
         return
 
-    child = CURRENT_DIR.find_child(target)
-    if child is None:
-        print(f"cd: {target}: папка не найдена")
+    for index, command in enumerate(history_list, start=1):
+        print(f"{index:3d}  {command}")
+
+
+def cmd_mkdir(args):
+    """
+    Команда mkdir: создаёт папку в текущей VFS.
+
+    Args:
+        args: список аргументов. args[0] — имя папки.
+    """
+    if current_dir is None:
+        print(f"mkdir: {args}")
         return
 
-    if not child.is_dir:
-        print(f"cd: {target}: не папка")
+    if not args:
+        print("mkdir: не указано имя папки")
         return
 
-    CURRENT_DIR = child
+    name = args[0]
+
+    if not current_dir.is_dir:
+        print(f"mkdir: {current_dir.name}: не папка")
+        return
+
+    if current_dir.find_child(name) is not None:
+        print(f"mkdir: {name}: уже существует")
+        return
+
+    new_dir = VfsNode(name, is_dir=True)
+    current_dir.add_child(new_dir)
+    print(f"Создана папка: {name}")
+
+
+def cmd_vfs_load(args):
+    """
+    Команда vfs-load: загружает новую VFS из файла.
+
+    Args:
+        args: список аргументов. args[0] — путь к XML.
+    """
+    global current_vfs, current_dir
+
+    if not args:
+        print("vfs-load: не указан путь к файлу")
+        return
+
+    path = args[0]
+    new_vfs = load_vfs(path)
+
+    if new_vfs is None:
+        return
+
+    current_vfs = new_vfs
+    current_dir = new_vfs
+    print(f"VFS загружена: {new_vfs.name}")
 
 
 def execute(command, args):
@@ -303,6 +426,14 @@ def execute(command, args):
         cmd_ls(args)
     elif command == "cd":
         cmd_cd(args)
+    elif command == "uptime":
+        cmd_uptime(args)
+    elif command == "history":
+        cmd_history_list(args)
+    elif command == "mkdir":
+        cmd_mkdir(args)
+    elif command == "vfs-load":
+        cmd_vfs_load(args)
     else:
         print(f"{command}: command not found")
 
@@ -318,6 +449,9 @@ def process_line(line, custom_prompt=None):
     Returns:
         bool: True если нужно продолжать, False если выход.
     """
+    stripped = line.strip()
+    if stripped:
+        history_list.append(stripped)
     try:
         command, args = parse_command(line)
     except Exception as exc:
@@ -427,7 +561,9 @@ def run_script(path):
     if lines is None:
         return
 
-    known_commands = ("ls", "cd")
+    known_commands = (
+        "ls", "cd", "uptime", "history", "mkdir", "vfs-load",
+    )
     errors_count = 0
 
     for line_number, line in enumerate(lines, start=1):
@@ -466,10 +602,10 @@ def repl(custom_prompt=None):
 
 def main():
     """Точка входа."""
-    global CURRENT_VFS, CURRENT_DIR, START_TIME
+    global current_vfs, current_dir, start_time
 
     import time
-    START_TIME = time.time()
+    start_time = time.time()
 
     args = parse_args()
     print_debug(args)
@@ -477,8 +613,8 @@ def main():
     if args.vfs:
         vfs_root = load_vfs(args.vfs)
         if vfs_root is not None:
-            CURRENT_VFS = vfs_root
-            CURRENT_DIR = vfs_root
+            current_vfs = vfs_root
+            current_dir = vfs_root
             print(f"VFS загружена: {vfs_root.name}")
 
     if args.script:
