@@ -324,6 +324,7 @@ def cmd_cd(args):
 
     current_dir = current
 
+
 def cmd_uptime(args):
     """
     Команда uptime: показывает время работы эмулятора.
@@ -561,8 +562,8 @@ def run_script(path):
         return
 
     known_commands = (
-    "ls", "cd", "uptime", "history", "mkdir", "vfs-load",
-)
+        "ls", "cd", "uptime", "history", "mkdir", "vfs-load",
+    )
     errors_count = 0
 
     for line_number, line in enumerate(lines, start=1):
